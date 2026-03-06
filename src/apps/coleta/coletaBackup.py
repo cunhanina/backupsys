@@ -12,10 +12,64 @@ from src.core.utils import (
     gerar_nome_inventario_padrao, 
     BASE_DIR,
     audit_log,
-    monitor # Importante: importar o monitor
+    monitor
 )
 from src.ui.styles import BOSCH_COLORS, get_fonts
 from src.ui.components import ConfirmationModal
+
+class ErrorModal(ctk.CTkToplevel):
+    def __init__(self, master, title, message, fonts):
+        super().__init__(master)
+        
+        self.title("")
+        self.geometry("450x220")
+        self.configure(fg_color=BOSCH_COLORS["background_white"])
+        self.resizable(False, False)
+        
+        self.transient(master)
+        self.grab_set()
+
+        self.update_idletasks()
+        x = master.winfo_rootx() + (master.winfo_width() // 2) - 225
+        y = master.winfo_rooty() + (master.winfo_height() // 2) - 110
+        self.geometry(f"+{x}+{y}")
+
+        top_bar = ctk.CTkFrame(self, height=6, fg_color=BOSCH_COLORS["danger"], corner_radius=0)
+        top_bar.pack(fill="x", side="top")
+
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=30, pady=25)
+
+        ctk.CTkLabel(
+            content, 
+            text=f"⚠️ {title.upper()}", 
+            font=fonts["subtitle"], 
+            text_color=BOSCH_COLORS["danger"]
+        ).pack(anchor="w", pady=(0, 10))
+
+        ctk.CTkLabel(
+            content, 
+            text=message, 
+            font=fonts["small"], 
+            text_color=BOSCH_COLORS["text_primary"],
+            justify="left",
+            wraplength=380
+        ).pack(anchor="w", fill="x", expand=True)
+
+        btn_ok = ctk.CTkButton(
+            content, 
+            text="ENTENDIDO", 
+            width=120, 
+            height=40, 
+            corner_radius=0,
+            fg_color=BOSCH_COLORS["danger"], 
+            hover_color="#C00005",
+            text_color="white",
+            font=ctk.CTkFont(weight="bold"),
+            command=self.destroy
+        )
+        btn_ok.pack(side="right", pady=(10, 0))
+
 
 class FileRow(ctk.CTkFrame):
     def __init__(self, master, filepath, on_delete_callback, fonts):
@@ -46,6 +100,7 @@ class FileRow(ctk.CTkFrame):
         )
         self.btn_del.pack(side="right")
 
+
 class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self):
         super().__init__()
@@ -58,6 +113,7 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.fonts = get_fonts()
         self.assets, self._resize_timer = {}, None
         self.selected_files = []
+        self.formatted_inv = "" 
         
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -90,6 +146,18 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
         asp = self.assets["logo"].width / self.assets["logo"].height
         self.logo_label.configure(image=ctk.CTkImage(self.assets["logo"], size=(int(60*asp), 60)))
 
+    # --- MODIFICAÇÃO: Validator agora aceita limite de caracteres ---
+    def _apenas_numeros(self, var, limit=None):
+        valor = var.get()
+        apenas_digitos = ''.join(filter(str.isdigit, valor))
+        
+        # Se um limite for passado, corta a string
+        if limit and len(apenas_digitos) > limit:
+            apenas_digitos = apenas_digitos[:limit]
+            
+        if valor != apenas_digitos:
+            var.set(apenas_digitos)
+
     def _setup_ui(self):
         self.sg_bar = ctk.CTkLabel(self, text="", height=12, fg_color="transparent")
         self.sg_bar.grid(row=0, column=0, sticky="ew")
@@ -107,13 +175,34 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.cont = ctk.CTkFrame(self, fg_color="transparent")
         self.cont.grid(row=2, column=0, sticky="nsew", padx=80, pady=(0, 10))
         
-        ctk.CTkLabel(self.cont, text="Nº INVENTÁRIO", font=self.fonts["small"], text_color=BOSCH_COLORS["text_secondary"]).pack(anchor="w")
-        self.ent_inv = ctk.CTkEntry(self.cont, height=50, corner_radius=0, 
+        ctk.CTkLabel(self.cont, text="Nº INVENTÁRIO (Primeiro Dígito + Restante)", font=self.fonts["small"], text_color=BOSCH_COLORS["text_secondary"]).pack(anchor="w")
+        
+        inv_frame = ctk.CTkFrame(self.cont, fg_color="transparent")
+        inv_frame.pack(fill="x", pady=(5,25))
+        
+        self.var_inv_first = ctk.StringVar()
+        # --- MODIFICAÇÃO: Trava o primeiro campo em 1 caractere ---
+        self.var_inv_first.trace_add('write', lambda *args: self._apenas_numeros(self.var_inv_first, limit=1))
+        
+        self.var_inv_last = ctk.StringVar()
+        # O segundo campo não tem limite, aceita os demais números
+        self.var_inv_last.trace_add('write', lambda *args: self._apenas_numeros(self.var_inv_last))
+
+        self.ent_inv_first = ctk.CTkEntry(inv_frame, height=50, width=50, corner_radius=0, 
+                                     textvariable=self.var_inv_first,
+                                     border_color=BOSCH_COLORS["border_sutil"],
+                                     fg_color=BOSCH_COLORS["background_light"],
+                                     text_color=BOSCH_COLORS["text_primary"],
+                                     justify="center")
+        self.ent_inv_first.pack(side="left", padx=(0, 10))
+        
+        self.ent_inv_last = ctk.CTkEntry(inv_frame, height=50, corner_radius=0, 
+                                     textvariable=self.var_inv_last,
                                      border_color=BOSCH_COLORS["border_sutil"],
                                      fg_color=BOSCH_COLORS["background_light"],
                                      text_color=BOSCH_COLORS["text_primary"])
-        self.ent_inv.pack(fill="x", pady=(5,25))
-        
+        self.ent_inv_last.pack(side="left", fill="x", expand=True)
+
         cb_f = ctk.CTkFrame(self.cont, fg_color="transparent")
         cb_f.pack(fill="x", pady=(0, 20))
         cb_style = {"font": self.fonts["small"], "text_color": BOSCH_COLORS["text_primary"], 
@@ -134,7 +223,7 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
                      text_color=BOSCH_COLORS["blue"]).pack(pady=(0, 10))
         ctk.CTkLabel(self.empty_state_frame, text="Arraste e solte arquivos aqui", 
                      font=self.fonts["subtitle"], text_color=BOSCH_COLORS["text_primary"]).pack()
-        ctk.CTkLabel(self.empty_state_frame, text="ou", 
+        ctk.CTkLabel(self.empty_state_frame, text="Permitido: .txt ou sem extensão", 
                      font=self.fonts["small"], text_color=BOSCH_COLORS["text_secondary"]).pack(pady=5)
         ctk.CTkButton(self.empty_state_frame, text="SELECIONAR DO COMPUTADOR", 
                       fg_color="transparent", border_width=1, border_color=BOSCH_COLORS["blue"],
@@ -169,6 +258,9 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.lbl_st = ctk.CTkLabel(self.prog_f, text="", font=self.fonts["log"], text_color=BOSCH_COLORS["text_secondary"])
         self.lbl_st.pack()
 
+    def _show_error(self, title, message):
+        ErrorModal(self, title, message, self.fonts)
+
     def _update_drop_zone_view(self):
         if not self.selected_files:
             self.list_container.pack_forget()
@@ -187,11 +279,21 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self._add_files(new_files)
 
     def _add_files(self, file_paths):
+        arquivos_invalidos = False
+        
         for path in file_paths:
-            if path not in self.selected_files:
-                self.selected_files.append(path)
-                row = FileRow(self.scroll, path, self._remove_file, self.fonts)
-                row.pack(fill="x", pady=2)
+            ext = os.path.splitext(path)[1].lower()
+            if ext in ["", ".txt"]:
+                if path not in self.selected_files:
+                    self.selected_files.append(path)
+                    row = FileRow(self.scroll, path, self._remove_file, self.fonts)
+                    row.pack(fill="x", pady=2)
+            else:
+                arquivos_invalidos = True
+                
+        if arquivos_invalidos:
+            self._show_error("Arquivo Inválido", "Um ou mais arquivos foram ignorados. O sistema permite apenas arquivos '.txt' ou sem extensão.")
+            
         self._update_drop_zone_view()
 
     def _remove_file(self, row_widget):
@@ -207,9 +309,44 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self._add_files(f)
 
     def _on_submit(self):
-        inv = self.ent_inv.get().strip()
-        if not inv or not self.selected_files: return
-        info = {"Inventário": inv, "Total de Arquivos": str(len(self.selected_files))}
+        first_digit = self.ent_inv_first.get().strip()
+        last_digits = self.ent_inv_last.get().strip()
+
+        # --- MODIFICAÇÃO: Travas estritas de obrigatoriedade ---
+        if not first_digit:
+            self._show_error("Campo Obrigatório", "O primeiro dígito do inventário não pode ficar vazio.")
+            return
+
+        # Como já limitamos a 1 digito em tempo real, isso é apenas uma checagem de segurança
+        if len(first_digit) != 1:
+            self._show_error("Entrada Inválida", "O primeiro campo do inventário deve conter exatamente 1 dígito.")
+            return
+
+        if not last_digits:
+            self._show_error("Campo Obrigatório", "Por favor, preencha o restante do número do inventário no segundo campo.")
+            return
+
+        if not self.selected_files: 
+            self._show_error("Ação Inválida", "Você precisa adicionar pelo menos um arquivo na área de coleta antes de executar.")
+            return
+        
+        tipos = []
+        if self.cb_cnc.get() == 1: tipos.append("CNC")
+        if self.cb_plc.get() == 1: tipos.append("PLC")
+        
+        if not tipos:
+            self._show_error("Seleção Obrigatória", "Selecione pelo menos uma origem dos arquivos (CNC ou PLC) nas caixas de marcação.")
+            return
+            
+        self.tipo_pasta = "_".join(tipos)
+
+        self.formatted_inv = gerar_nome_inventario_padrao(last_digits, primeiro_digito=first_digit)
+
+        info = {
+            "Inventário": self.formatted_inv, 
+            "Pasta Destino": self.tipo_pasta,
+            "Total de Arquivos": str(len(self.selected_files))
+        }
         ConfirmationModal(self, "Revisão de Coleta", info, self._start_process, self.fonts)
 
     def _start_process(self):
@@ -218,11 +355,12 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def _worker(self):
         try:
-            inv = gerar_nome_inventario_padrao(self.ent_inv.get())
+            inv = self.formatted_inv
+            
             ts = [os.path.getmtime(f) for f in self.selected_files]
             dt = datetime.fromtimestamp(max(ts)).strftime("%Y%m%d")
             
-            dest = os.path.join(CAMINHO_RAIZ_ORIGEM_07, inv, dt)
+            dest = os.path.join(CAMINHO_RAIZ_ORIGEM_07, inv, dt, self.tipo_pasta)
             os.makedirs(dest, exist_ok=True)
             
             file_names = [os.path.basename(f) for f in self.selected_files]
@@ -232,27 +370,33 @@ class ColetaApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 self.after(0, lambda v=i/len(self.selected_files): self.bar.set(v))
                 shutil.copy2(f, dest)
             
-            # Log de auditoria
             audit_log(
-                folder=inv,
+                folder=f"{inv}/{dt}/{self.tipo_pasta}",
                 files=file_names,
                 src=source_dir,
                 dest=dest
             )
             
-            # CRÍTICO: Atualizar o snapshot para que esses arquivos não apareçam como "novos" na próxima checagem
             monitor.save_snapshot()
             
             self.after(0, lambda: self.lbl_st.configure(text="Sucesso!", text_color=BOSCH_COLORS["success"]))
             self.after(3000, self._reset_ui)
         except Exception as e:
-            self.after(0, lambda: self.lbl_st.configure(text=f"Erro: {e}", text_color=BOSCH_COLORS["danger"]))
+            self.after(0, lambda: self._show_error("Erro de Execução", f"Ocorreu um erro interno:\n{e}"))
+            self.after(0, self._reset_ui)
 
     def _reset_ui(self):
         self.prog_f.pack_forget(); self.btn_run.pack(fill="both")
         self.selected_files.clear()
         for w in self.scroll.winfo_children(): w.destroy()
-        self.ent_inv.delete(0, 'end'); self.bar.set(0)
+        
+        self.ent_inv_first.delete(0, 'end')
+        self.ent_inv_last.delete(0, 'end')
+        
+        self.cb_cnc.deselect()
+        self.cb_plc.deselect()
+        
+        self.bar.set(0)
         self._update_drop_zone_view()
 
 if __name__ == "__main__":

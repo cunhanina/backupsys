@@ -42,9 +42,13 @@ CAMINHO_RAIZ_ORIGEM_07 = os.path.join(CONTEXTO["PATH_ORIGEM_07"])
 CAMINHO_RAIZ_DESTINO_06 = os.path.join(CONTEXTO["PATH_DESTINO_06"])
 
 # --- FUNÇÕES UTILITÁRIAS ---
-def gerar_nome_inventario_padrao(termo: str) -> str:
-    nums = "".join(filter(str.isdigit, termo))
-    return f"2{nums[-11:].zfill(11)}"
+def gerar_nome_inventario_padrao(termo: str, primeiro_digito: str = "2") -> str:
+    """
+    Formata o inventário para 12 dígitos.
+    O parâmetro 'primeiro_digito' garante compatibilidade retroativa com os apps antigos (que assumem '2').
+    """
+    nums = "".join(filter(str.isdigit, str(termo)))
+    return f"{str(primeiro_digito).strip()}{nums[-11:].zfill(11)}"
 
 def get_file_owner(filepath: str) -> str:
     """Descobre o dono do arquivo via Windows Security API."""
@@ -112,21 +116,16 @@ class SnapshotManager:
         added = current_state - old_state
         deleted = old_state - current_state
         
-        # --- DETECÇÃO DE MOVIMENTAÇÃO (Crucial para o seu pedido) ---
+        # --- DETECÇÃO DE MOVIMENTAÇÃO ---
         moves = []
-        # Convertemos para lista para poder modificar os sets originais
         for del_path in list(deleted):
             del_name = os.path.basename(del_path)
             
-            # Procura se esse arquivo deletado apareceu nos adicionados (Mover = Delete + Add)
             for add_path in list(added):
                 add_name = os.path.basename(add_path)
                 
                 if del_name == add_name:
-                    # ENCONTRAMOS UM MOVIMENTO!
                     moves.append((del_path, add_path))
-                    
-                    # Remove das listas de "Adicionado" e "Deletado" para não duplicar o log
                     if del_path in deleted: deleted.remove(del_path)
                     if add_path in added: added.remove(add_path)
                     break
@@ -134,14 +133,14 @@ class SnapshotManager:
         # 1. LOGA AS MOVIMENTAÇÕES
         for old_path, new_path in moves:
             full_new_path = os.path.join(self.root_path, new_path)
-            owner = get_file_owner(full_new_path) # Conseguimos saber o dono pois o arquivo existe!
+            owner = get_file_owner(full_new_path)
             filename = os.path.basename(new_path)
             
             audit_log(
                 folder="Movimentação Interna",
                 files=[filename],
-                src=os.path.dirname(old_path),  # Pasta Antiga
-                dest=os.path.dirname(new_path), # Pasta Nova
+                src=os.path.dirname(old_path),
+                dest=os.path.dirname(new_path),
                 custom_user=owner
             )
 
@@ -168,7 +167,7 @@ class SnapshotManager:
                     custom_user=owner
                 )
 
-        # 3. LOGA AS REMOÇÕES RESTANTES (Sem dono, infelizmente)
+        # 3. LOGA AS REMOÇÕES RESTANTES
         if deleted:
             files_by_folder = {}
             for rel_path in deleted:

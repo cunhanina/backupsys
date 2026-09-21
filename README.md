@@ -1,6 +1,8 @@
 <div align="center">
+
+  
   # Industrial Backup System
-   
+  
   [![Python](https://img.shields.io/badge/Python-3.14-007BC0?style=flat&logo=python&logoColor=white)](https://python.org)
   [![Design System](https://img.shields.io/badge/Design_System-BDS-007BC0?style=flat)](https://bosch-design-system.com)
   [![Environment](https://img.shields.io/badge/Environment-Test_%7C_Prod-orange?style=flat)](#)

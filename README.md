@@ -1,12 +1,5 @@
 <div align="center">
-  <img src="assets/images/supergraph.png" width="100%" height="12" alt="Bosch Supergraph" />
-  <br />
-  <br />
-   
-  <img src="assets/images/logo_bosch.png" width="140" alt="Bosch Logo" />
-  <br />
-
-  # TEF12 - Industrial Backup System
+  # Industrial Backup System
    
   [![Python](https://img.shields.io/badge/Python-3.14-007BC0?style=flat&logo=python&logoColor=white)](https://python.org)
   [![Design System](https://img.shields.io/badge/Design_System-BDS-007BC0?style=flat)](https://bosch-design-system.com)
